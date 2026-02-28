@@ -1,0 +1,954 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Smart Trip Planner - Ranchi</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <style>
+      :root {
+        --primary: #3b82f6;
+        --primary-dark: #2563eb;
+        --secondary: #ef4444;
+        --success: #10b981;
+        --warning: #f59e0b;
+        --bg-light: #f8fafc;
+        --text-dark: #0f172a;
+        --shadow: 0 4px 6px -1px rgb(0 0 0 / 0.08), 0 2px 4px -2px rgb(0 0 0 / 0.06);
+      }
+
+      * { box-sizing: border-box; }
+
+      body, html {
+        margin: 0;
+        padding: 0;
+        font-family: "Plus Jakarta Sans", "Segoe UI", system-ui, sans-serif;
+        background: linear-gradient(160deg, #0f172a 0%, #1e293b 40%, #334155 100%);
+        background-attachment: fixed;
+        height: 100vh;
+        color: var(--text-dark);
+      }
+
+      .container {
+        display: grid;
+        grid-template-columns: 380px 1fr;
+        height: 100vh;
+      }
+
+      .sidebar {
+        background: rgba(248, 250, 252, 0.97);
+        backdrop-filter: blur(20px);
+        padding: 24px;
+        box-shadow: 4px 0 30px rgba(0, 0, 0, 0.08);
+        z-index: 1001;
+        display: flex;
+        flex-direction: column;
+        gap: 16px;
+        overflow-y: auto;
+        border-right: 1px solid rgba(226, 232, 240, 0.6);
+        animation: slideInLeft 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+      }
+
+      @keyframes slideInLeft {
+        from { opacity: 0; transform: translateX(-30px); }
+        to { opacity: 1; transform: translateX(0); }
+      }
+
+      h2 {
+        margin: 0 0 4px 0;
+        font-size: 1.5rem;
+        font-weight: 800;
+        background: linear-gradient(135deg, var(--primary), #8b5cf6);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+        animation: fadeInDown 0.5s ease-out;
+      }
+
+      @keyframes fadeInDown {
+        from { opacity: 0; transform: translateY(-15px); }
+        to { opacity: 1; transform: translateY(0); }
+      }
+
+      .input-group {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        animation: fadeInUp 0.5s ease-out backwards;
+      }
+      .input-group:nth-child(2) { animation-delay: 0.05s; }
+      .input-group:nth-child(3) { animation-delay: 0.1s; }
+      .input-group:nth-child(4) { animation-delay: 0.15s; }
+      .input-group:nth-child(5) { animation-delay: 0.2s; }
+      .input-group:nth-child(6) { animation-delay: 0.25s; }
+
+      @keyframes fadeInUp {
+        from { opacity: 0; transform: translateY(20px); }
+        to { opacity: 1; transform: translateY(0); }
+      }
+
+      label {
+        font-weight: 600;
+        font-size: 0.85rem;
+        color: #475569;
+      }
+
+      select, input[type="number"] {
+        padding: 12px 14px;
+        border: 2px solid #e2e8f0;
+        border-radius: 10px;
+        background: #fff;
+        font-size: 0.95rem;
+        transition: all 0.3s ease;
+      }
+      select:focus, input[type="number"]:focus {
+        outline: none;
+        border-color: var(--primary);
+        box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.15);
+        transform: translateY(-2px);
+      }
+
+      #routeBtn {
+        background: linear-gradient(135deg, var(--primary), #4f46e5);
+        color: white;
+        border: none;
+        padding: 14px 20px;
+        border-radius: 12px;
+        font-weight: 700;
+        cursor: pointer;
+        box-shadow: 0 4px 20px rgba(59, 130, 246, 0.4);
+        transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+        animation: fadeInUp 0.5s ease-out 0.3s backwards;
+      }
+      #routeBtn:hover {
+        transform: translateY(-3px) scale(1.02);
+        box-shadow: 0 8px 30px rgba(59, 130, 246, 0.5);
+      }
+      #routeBtn:active { transform: translateY(-1px); }
+
+      .route-card {
+        padding: 16px;
+        border-radius: 12px;
+        border-left: 5px solid #cbd5e1;
+        background: #fff;
+        box-shadow: var(--shadow);
+        margin-bottom: 4px;
+        opacity: 0;
+        transform: translateY(15px);
+        transition: all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+      }
+      .route-card.animate-in {
+        opacity: 1;
+        transform: translateY(0);
+        animation: cardPop 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);
+      }
+
+      @keyframes cardPop {
+        0% { transform: translateY(15px) scale(0.98); }
+        100% { transform: translateY(0) scale(1); }
+      }
+
+      .analytics-card, .route-comparison .route-card { opacity: 1; transform: none; animation: fadeInUp 0.6s ease-out 0.2s backwards; }
+
+      .route-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        margin-bottom: 10px;
+      }
+
+      .badge {
+        font-size: 0.7rem;
+        padding: 4px 10px;
+        border-radius: 20px;
+        text-transform: uppercase;
+        font-weight: 700;
+        letter-spacing: 0.3px;
+      }
+
+      .blue-bg { background: linear-gradient(135deg, #dbeafe, #bfdbfe); color: var(--primary); }
+      .green-bg { background: linear-gradient(135deg, #d1fae5, #a7f3d0); color: var(--success); }
+      .purple-bg { background: linear-gradient(135deg, #f3e8ff, #e9d5ff); color: #7e22ce; }
+
+      .stats-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 10px;
+        font-size: 0.85rem;
+      }
+
+      .stat-item {
+        padding: 10px 12px;
+        background: #f8fafc;
+        border-radius: 8px;
+        color: #475569;
+        transition: transform 0.2s, box-shadow 0.2s;
+      }
+      .stat-item:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.06);
+      }
+      .stat-item b { color: var(--text-dark); }
+
+      .map-container {
+        position: relative;
+        animation: fadeIn 0.8s ease-out 0.2s backwards;
+      }
+
+      @keyframes fadeIn {
+        from { opacity: 0; }
+        to { opacity: 1; }
+      }
+
+      #map { height: 100%; width: 100%; }
+
+      .infoBox {
+        position: absolute;
+        top: 20px;
+        right: 20px;
+        background: rgba(255, 255, 255, 0.98);
+        backdrop-filter: blur(10px);
+        padding: 18px;
+        border-radius: 14px;
+        box-shadow: 0 10px 40px rgba(0, 0, 0, 0.12);
+        z-index: 1000;
+        min-width: 200px;
+        border: 1px solid rgba(226, 232, 240, 0.8);
+        animation: slideInRight 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);
+      }
+
+      @keyframes slideInRight {
+        from { opacity: 0; transform: translateX(20px); }
+        to { opacity: 1; transform: translateX(0); }
+      }
+
+      .infoBox > div:first-child {
+        font-weight: 700;
+        margin-bottom: 12px;
+        padding-bottom: 8px;
+        border-bottom: 2px solid #e2e8f0;
+        font-size: 0.95rem;
+      }
+
+      .infoBox .toggle-btn {
+        margin-top: 8px;
+        padding: 8px 12px;
+        border: none;
+        border-radius: 8px;
+        font-size: 0.8rem;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.3s ease;
+      }
+      .infoBox .toggle-btn:hover { transform: scale(1.03); }
+      .infoBox .toggle-btn:active { transform: scale(0.98); }
+
+      .time-display { text-align: right; line-height: 1.5; }
+      .walk-text { font-size: 0.75rem; color: #64748b; font-weight: 500; }
+
+      .comp-table {
+        width: 100%;
+        font-size: 0.8rem;
+        border-collapse: collapse;
+        margin-top: 8px;
+      }
+      .comp-table th { text-align: left; color: #64748b; padding: 6px 0; }
+      .comp-table td { padding: 8px 0; border-top: 1px solid #f1f5f9; }
+
+      .vehicle-icon {
+        background: linear-gradient(135deg, var(--primary), #4f46e5);
+        border: 3px solid white;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 14px;
+        box-shadow: 0 4px 20px rgba(59, 130, 246, 0.6);
+        animation: vehiclePulse 2s ease-in-out infinite;
+      }
+
+      @keyframes vehiclePulse {
+        0%, 100% { box-shadow: 0 4px 20px rgba(59, 130, 246, 0.6); }
+        50% { box-shadow: 0 4px 30px rgba(59, 130, 246, 0.9); }
+      }
+
+      #recommendation-card ul { padding-left: 20px; margin: 8px 0 0 0; }
+      #recommendation-card li { margin: 4px 0; color: #475569; }
+
+      .stats-grid .stat-item { animation: fadeInUp 0.4s ease-out backwards; }
+      .stats-grid .stat-item:nth-child(1) { animation-delay: 0.1s; }
+      .stats-grid .stat-item:nth-child(2) { animation-delay: 0.15s; }
+      .stats-grid .stat-item:nth-child(3) { animation-delay: 0.2s; }
+      .stats-grid .stat-item:nth-child(4) { animation-delay: 0.25s; }
+      .stats-grid .stat-item:nth-child(5) { animation-delay: 0.3s; }
+      .stats-grid .stat-item:nth-child(6) { animation-delay: 0.35s; }
+
+      @media (max-width: 768px) {
+        .container { grid-template-columns: 1fr; grid-template-rows: auto 400px; }
+        .sidebar { order: 2; height: auto; }
+        .map-container { order: 1; height: 400px; }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <div class="sidebar">
+        <h2>Smart Trip Planner</h2>
+
+        <div class="input-group">
+          <label>Starting Point</label>
+          <select id="origin">
+            <option value="">--select--</option>
+            <option value="23.349319,85.335569">Ranchi Railway Station</option>
+            <option value="23.3973838,85.3028826">Kanke Road</option>
+            <option value="23.3168885,85.2818038">Jagannath Temple</option>
+            <option value="23.3680102,85.3176399">Ranchi Lake</option>
+            <option value="23.4014335,85.3380287">Tagore Hill</option>
+            <option value="23.3765429,85.3113661">Pahari Mandir </option>
+          </select>
+        </div>
+
+        <div class="input-group">
+          <label>Destination</label>
+          <select id="destination">
+            <option value="">--select--</option>
+            <option value="23.349319,85.335569">Ranchi Railway Station</option>
+            <option value="23.3973838,85.3028826">Kanke Road</option>
+            <option value="23.3168885,85.2818038">Jagannath Temple</option>
+            <option value="23.3680102,85.3176399">Ranchi Lake</option>
+            <option value="23.4014335,85.3380287">Tagore Hill</option>
+            <option value="23.3765429,85.3113661">Pahari Mandir </option>
+          </select>
+        </div>
+
+        <div class="input-group">
+          <label>Number of Passengers</label>
+          <input type="number" id="passengers" value="1" min="1" max="50" />
+        </div>
+
+        <button id="routeBtn">Calculate Optimal Route</button>
+
+        <!-- Smart Recommendation Card -->
+        <div id="recommendation-card" class="route-card" style="border-left-color:#f59e0b; display:none;">
+          <div class="route-header">
+            <span class="badge" style="background:#fef3c7;color:#b45309;">🏆 Smart Recommendation</span>
+          </div>
+          <b id="best-route-title"></b>
+          <ul id="recommendation-reasons" style="margin-top:8px;"></ul>
+        </div>
+
+        <div id="comparison-card" class="route-card" style="border-left-color: #8b5cf6; display: none">
+          <div class="route-header">
+            <span class="badge purple-bg">Route Comparison</span>
+          </div>
+          <table class="comp-table">
+            <thead>
+              <tr>
+                <th>Factor</th>
+                <th align="right">Shortest</th>
+                <th align="right">Longest</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Distance</td>
+                <td align="right"><b id="min-dist">--</b></td>
+                <td align="right"><b id="max-dist">--</b></td>
+              </tr>
+              <tr>
+                <td>Time</td>
+                <td align="right"><b id="min-time">--</b></td>
+                <td align="right"><b id="max-time">--</b></td>
+              </tr>
+            </tbody>
+          </table>
+          <div style="margin-top: 8px; font-size: 0.75rem; color: var(--secondary); text-align: center;">
+            Difference: <span id="dist-diff">0</span> km extra on longest path
+          </div>
+        </div>
+
+        <div class="route-card analytics-card">
+          <div class="route-header">
+            <span class="badge green-bg">Travel Analytics</span>
+          </div>
+          <div class="input-group" style="margin-bottom: 12px;">
+            <label>Bus Charges Per Km:</label>
+            <select id="seatType">
+              <option value="10">(₹10) Non A/C Bus</option>
+              <option value="15">(₹15) AC Bus</option>
+            </select>
+          </div>
+          <div class="stats-grid">
+            <div class="stat-item">Transit: <b>22 km/h</b></div>
+            <div class="stat-item">Walk: <b>5 km/h</b></div>
+            <div class="stat-item">Auto: <b id="cost-non-ac">₹0</b></div>
+            <div class="stat-item">Bus: <b id="cost-ac">₹0</b></div>
+            <div class="stat-item">Population: <b id="pop-exposure">--</b></div>
+            <div class="stat-item">Weather: <b id="temp">--</b></div>
+          </div>
+        </div>
+
+        <div class="route-comparison">
+          <div class="route-card" style="border-left-color: var(--primary)">
+            <div class="route-header">
+              <span class="badge blue-bg">Estimated Time (Shortest)</span>
+              <div id="time-est" class="time-display">
+                <span style="font-weight: bold">-- min</span>
+              </div>
+            </div>
+            <div class="stats-grid">
+              <div class="stat-item">Total Dist: <b id="dist-sidebar">0 km</b></div>
+              <div class="stat-item">Eco-Score: <b id="pop"></b></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="map-container">
+        <div id="map"></div>
+        <div class="infoBox">
+          <div>Suggested Route</div>
+          <div style="font-size: 0.95rem;">Dist: <span id="distance-info" style="font-weight: 700; color: var(--primary);">0</span> km</div>
+          <div style="margin-top: 10px;">
+            <button id="accidentToggle" class="toggle-btn" style="background: linear-gradient(135deg,#dc2626,#ef4444); color: white;">
+              🚧 Accident Zones
+            </button>
+          </div>
+          <div style="margin-top: 8px;">
+            <button id="crimeToggle" class="toggle-btn" style="background: linear-gradient(135deg,#f59e0b,#fbbf24); color: white;">
+              🚨 Crime Zones
+            </button>
+          </div>
+           <div style="margin-top: 8px;">
+           <button id="sosBtn" style="
+  background: linear-gradient(135deg,#dc2626,#ef4444);
+  color:white;
+  padding:14px;
+  border:none;
+  border-radius:10px;
+  font-weight:bold;
+  margin-top:12px;
+">
+🚨 EMERGENCY SOS
+</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="config.js"></script>
+    <script>
+      const ORS_API_KEY = CONFIG.ORS_API_KEY;
+const OPENWEATHER_API_KEY = CONFIG.OPENWEATHER_API_KEY;
+      // Map & APIs
+      const map = L.map("map").setView([23.3441, 85.3096], 13);
+      L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", { attribution: "© OSM" }).addTo(map);
+
+      // ==================
+// VISITED PLACES CODE
+// ==================
+let visitedPlaces = [];
+let visitedLayer = L.layerGroup().addTo(map);
+
+// Load visited places from localStorage
+if (localStorage.getItem("visitedPlaces")) {
+  visitedPlaces = JSON.parse(localStorage.getItem("visitedPlaces"));
+  visitedPlaces.forEach(p => {
+    L.marker([p.lat, p.lon], { 
+      icon: L.divIcon({ className: "vehicle-icon", html: "🏁", iconSize: [24,24] }) 
+    })
+    .bindPopup(`✅ Visited: ${p.name}<br>📅 Date: ${p.date}`)
+    .addTo(visitedLayer);
+  });
+}
+
+// --- Create buttons once ---
+const sidebar = document.querySelector(".sidebar");
+
+const visitedBtn = document.createElement("button");
+visitedBtn.innerText = "📌 Mark Destination as Visited";
+visitedBtn.style.cssText = `
+  margin-top:12px; padding:12px; border:none; border-radius:10px;
+  font-weight:700; cursor:pointer; background:linear-gradient(135deg,#10b981,#3b82f6);
+  color:white;
+`;
+sidebar.appendChild(visitedBtn);
+
+const unmarkBtn = document.createElement("button");
+unmarkBtn.innerText = "❌ Unmark Destination";
+unmarkBtn.style.cssText = `
+  margin-top:8px; padding:12px; border:none; border-radius:10px;
+  font-weight:700; cursor:pointer; background:linear-gradient(135deg,#ef4444,#dc2626);
+  color:white;
+`;
+sidebar.appendChild(unmarkBtn);
+
+// --- Event listeners ---
+visitedBtn.addEventListener("click", function() {
+  const destVal = document.getElementById("destination").value;
+  if (!destVal) { alert("Select a destination first!"); return; }
+  const destination = destVal.split(",").map(Number);
+  const name = document.getElementById("destination").selectedOptions[0].text;
+  const today = new Date().toLocaleDateString();
+
+  if (visitedPlaces.some(p => p.lat === destination[0] && p.lon === destination[1])) {
+    alert("This place is already marked as visited!");
+    return;
+  }
+
+  visitedPlaces.push({ lat: destination[0], lon: destination[1], name, date: today });
+  localStorage.setItem("visitedPlaces", JSON.stringify(visitedPlaces));
+
+  L.marker([destination[0], destination[1]], { 
+    icon: L.divIcon({ className: "vehicle-icon", html: "🏁", iconSize: [24,24] }) 
+  })
+  .bindPopup(`✅ Visited: ${name}<br>📅 Date: ${today}`)
+  .addTo(visitedLayer)
+  .openPopup();
+});
+
+unmarkBtn.addEventListener("click", function() {
+  const destVal = document.getElementById("destination").value;
+  if (!destVal) { alert("Select a destination first!"); return; }
+  const destination = destVal.split(",").map(Number);
+
+  visitedPlaces = visitedPlaces.filter(p => !(p.lat === destination[0] && p.lon === destination[1]));
+  localStorage.setItem("visitedPlaces", JSON.stringify(visitedPlaces));
+
+  // Refresh visited markers
+  visitedLayer.clearLayers();
+  visitedPlaces.forEach(p => {
+    L.marker([p.lat, p.lon], { 
+      icon: L.divIcon({ className: "vehicle-icon", html: "🏁", iconSize: [24,24] }) 
+    })
+    .bindPopup(`✅ Visited: ${p.name}<br>📅 Date: ${p.date}`)
+    .addTo(visitedLayer);
+  });
+});
+       const crimes = [
+  { lat: 23.339319, lon: 85.334569, type: "Theft", severity: "High" },          // near Ranchi Railway Station
+  { lat: 23.3972838, lon: 85.3024826, type: "Robbery", severity: "Moderate" },    // near Kanke Road
+  { lat: 23.4012333, lon: 85.3270287, type: "Pickpocket", severity: "Low" },      // near Jagannath Temple
+  { lat: 23.3680002, lon: 83.3176399, type: "Assault", severity: "High" },        // near Ranchi Lake
+  { lat: 23.3365419, lon:85.3013661, type: "Burglary", severity: "Moderate" },   // near Tagore Hill
+  { lat: 23.349319, lon: 85.335569, type: "Snatching", severity: "Low" }        // near Pahari Mandir
+];
+      document.getElementById("crimeToggle").addEventListener("click", function() {
+  if (crimesVisible) { 
+    hideCrimes(); 
+    this.innerText = "🚨 Show Crime Zones"; 
+    this.style.background="#f59e0b";
+  }
+  else { 
+    showCrimes(); 
+    this.innerText="✅ Hide Crime Zones"; 
+    this.style.background="#10b981";
+  }
+});
+
+function showCrimes() {
+  crimeLayer.clearLayers();
+  crimes.forEach(crime => {
+    L.circleMarker([crime.lat, crime.lon], { 
+      radius: 8, 
+      color:"orange", 
+      fillColor:"orange", 
+      fillOpacity:0.7 
+    })
+    .bindPopup(`🚨 Crime: ${crime.type}<br>Severity: ${crime.severity}`)
+    .addTo(crimeLayer);
+  });
+  crimeLayer.addTo(map);
+  crimesVisible = true;
+}
+  // --- Nearby Points of Interest ---
+  const atms = [
+    { lat:  23.350200, lon: 85.336000, lon: 85.3365, name: "HDFC ATM" },
+    { lat: 23.3660, lon: 85.3180, name: "SBI ATM" },
+    { lat: 23.4025, lon: 85.3395, name: "ICICI ATM" }
+  ];
+  const hospitals = [
+    { lat: 23.3480, lon: 85.3350, name: "Ranchi Hospital" },
+    { lat: 23.3710, lon: 85.3200, name: "Kanke Hospital" },
+    { lat: 23.4000, lon: 85.3370, name: "Tagore Hill Hospital" }
+  ];
+  const hotels = [
+    { lat: 23.3520, lon: 85.3380, name: "Hotel Ranchi Palace" },
+    { lat: 23.3670, lon: 85.3150, name: "Kanke Inn" },
+    { lat: 23.3990, lon: 85.3360, name: "Tagore Hill Resort" }
+  ];
+
+  // Create layer groups
+  let atmLayer = L.layerGroup();
+  let hospitalLayer = L.layerGroup();
+  let hotelLayer = L.layerGroup();
+
+  let atmsVisible = false;
+  let hospitalsVisible = false;
+  let hotelsVisible = false;
+
+  // --- Buttons ---
+  const atmBtn = document.createElement("button");
+  atmBtn.innerText = "🏧 Show ATMs";
+  atmBtn.style.cssText = visitedBtn.style.cssText;
+  sidebar.appendChild(atmBtn);
+
+  const hospitalBtn = document.createElement("button");
+  hospitalBtn.innerText = "🏥 Show Hospitals";
+  hospitalBtn.style.cssText = visitedBtn.style.cssText;
+  sidebar.appendChild(hospitalBtn);
+
+  const hotelBtn = document.createElement("button");
+  hotelBtn.innerText = "🏨 Show Hotels";
+  hotelBtn.style.cssText = visitedBtn.style.cssText;
+  sidebar.appendChild(hotelBtn);
+
+  // --- Event Listeners ---
+  atmBtn.addEventListener("click", function() {
+    if (atmsVisible) {
+      map.removeLayer(atmLayer);
+      atmsVisible = false;
+      this.innerText = "🏧 Show ATMs";
+      this.style.background = "linear-gradient(135deg,#10b981,#3b82f6)";
+    } else {
+      atmLayer.clearLayers();
+      atms.forEach(a => {
+        L.marker([a.lat, a.lon], { icon: L.divIcon({ className:"vehicle-icon", html:"🏧", iconSize:[24,24] }) })
+          .bindPopup(`🏧 ATM: ${a.name}`)
+          .addTo(atmLayer);
+      });
+      atmLayer.addTo(map);
+      atmsVisible = true;
+      this.innerText = "✅ Hide ATMs";
+      this.style.background = "#10b981";
+    }
+  });
+
+  hospitalBtn.addEventListener("click", function() {
+    if (hospitalsVisible) {
+      map.removeLayer(hospitalLayer);
+      hospitalsVisible = false;
+      this.innerText = "🏥 Show Hospitals";
+      this.style.background = "linear-gradient(135deg,#10b981,#3b82f6)";
+    } else {
+      hospitalLayer.clearLayers();
+      hospitals.forEach(h => {
+        L.marker([h.lat, h.lon], { icon: L.divIcon({ className:"vehicle-icon", html:"🏥", iconSize:[24,24] }) })
+          .bindPopup(`🏥 Hospital: ${h.name}`)
+          .addTo(hospitalLayer);
+      });
+      hospitalLayer.addTo(map);
+      hospitalsVisible = true;
+      this.innerText = "✅ Hide Hospitals";
+      this.style.background = "#10b981";
+    }
+  });
+
+  hotelBtn.addEventListener("click", function() {
+    if (hotelsVisible) {
+      map.removeLayer(hotelLayer);
+      hotelsVisible = false;
+      this.innerText = "🏨 Show Hotels";
+      this.style.background = "linear-gradient(135deg,#10b981,#3b82f6)";
+    } else {
+      hotelLayer.clearLayers();
+      hotels.forEach(h => {
+        L.marker([h.lat, h.lon], { icon: L.divIcon({ className:"vehicle-icon", html:"🏨", iconSize:[24,24] }) })
+          .bindPopup(`🏨 Hotel: ${h.name}`)
+          .addTo(hotelLayer);
+      });
+      hotelLayer.addTo(map);
+      hotelsVisible = true;
+      this.innerText = "✅ Hide Hotels";
+      this.style.background = "#10b981";
+    }
+  });
+
+function hideCrimes() { 
+  map.removeLayer(crimeLayer); 
+  crimesVisible=false; 
+}
+let crimeLayer = L.layerGroup();
+let crimesVisible = false;
+      let routeLayerGroup, originMarker, destinationMarker, animatedMarker;
+      let currentDist_km = 0;
+
+      const accidents = [
+        { lat: 23.35466, lon: 85.3382791, severity: "High" },
+        { lat: 23.35466, lon: 85.3382791, severity: "High" },
+        { lat: 23.3938866, lon: 85.33279647, severity: "Moderate" },
+        { lat: 23.3498, lon: 85.3355, severity: "Low" },
+        { lat: 23.4014335, lon: 85.3380287, severity: "Moderate" },
+      ];
+      let accidentLayer = L.layerGroup();
+      let accidentsVisible = false;
+
+      document.getElementById("accidentToggle").addEventListener("click", function() {
+        if (accidentsVisible) { hideAccidents(); this.innerText = "🚧 Show Accident Zones"; this.style.background="#dc2626";}
+        else { showAccidents(); this.innerText="✅ Hide Accident Zones"; this.style.background="#10b981";}
+      });
+
+      function showAccidents() {
+        accidentLayer.clearLayers();
+        accidents.forEach(acc => {
+          L.circleMarker([acc.lat, acc.lon], { radius: 8, color:"red", fillColor:"red", fillOpacity:0.7 })
+            .bindPopup("🚧 Accident Zone<br>Severity: " + acc.severity)
+            .addTo(accidentLayer);
+        });
+        accidentLayer.addTo(map);
+        accidentsVisible = true;
+      }
+
+      function hideAccidents() { map.removeLayer(accidentLayer); accidentsVisible=false; }
+
+      function aqiLabel(aqi) {
+        if(aqi===1) return "Good 😊"; if(aqi===2) return "Fair 🙂"; if(aqi===3) return "Moderate 😐";
+        if(aqi===4) return "Poor 😷"; if(aqi===5) return "Very Poor ☠️"; return "Unknown";
+      }
+
+      function animateMarker(coordinates){
+        if(animatedMarker) map.removeLayer(animatedMarker);
+        const icon = L.divIcon({className:"vehicle-icon", html:"🚗", iconSize:[24,24]});
+        animatedMarker = L.marker(coordinates[0],{icon:icon}).addTo(map);
+        let i=0; function move(){ if(i<coordinates.length){animatedMarker.setLatLng(coordinates[i]); i++; setTimeout(move,50);} } move();
+      }
+
+     function updateFares() {
+  const seatType = parseInt(document.getElementById("seatType").value);
+  const passengers = parseInt(document.getElementById("passengers").value) || 1;
+  const dist = parseFloat(currentDist_km) || 0;
+  const nonAcFare = Math.max(10, Math.round(dist * 5)) * passengers;
+  const acFare = Math.max(20, Math.round(dist * seatType)) * passengers;
+  document.getElementById("cost-non-ac").innerText = `₹${nonAcFare}`;
+  document.getElementById("cost-ac").innerText = `₹${acFare}`;
+}
+      document.getElementById("passengers").addEventListener("input", updateFares);
+      document.getElementById("seatType").addEventListener("change", updateFares);
+
+      function generateRecommendation(shortest_km, longest_km, transportTime, longestTime){
+        let reasons=[];
+        if(shortest_km<longest_km) reasons.push("Shortest distance reduces fuel and travel fatigue.");
+        if(transportTime<longestTime) reasons.push("Saves "+(longestTime-transportTime)+" minutes.");
+        if(shortest_km<5) reasons.push("Lower population exposure risk.");
+        reasons.push("Most cost-efficient option.");
+
+        document.getElementById("recommendation-card").style.display="block";
+        document.getElementById("recommendation-card").classList.add("animate-in");
+        document.getElementById("best-route-title").innerText="Recommended: Shortest Route ("+shortest_km+" km)";
+        const list=document.getElementById("recommendation-reasons"); list.innerHTML="";
+        reasons.forEach(r=>{let li=document.createElement("li"); li.textContent=r; list.appendChild(li);});
+      }
+
+   document.getElementById("routeBtn").addEventListener("click", async function() {
+  const originVal = document.getElementById("origin").value;
+  const destVal = document.getElementById("destination").value;
+  const origin = originVal ? originVal.split(",").map(Number) : [];
+  const destination = destVal ? destVal.split(",").map(Number) : [];
+
+  if (!originVal || !destVal || !origin[0] || !destination[0]) {
+    alert("Please select origin and destination.");
+    return;
+  }
+
+  // Clear previous layers
+  if (routeLayerGroup) map.removeLayer(routeLayerGroup);
+  if (originMarker) map.removeLayer(originMarker);
+  if (destinationMarker) map.removeLayer(destinationMarker);
+  if (animatedMarker) map.removeLayer(animatedMarker);
+
+  originMarker = L.marker([origin[0], origin[1]]).addTo(map);
+  destinationMarker = L.marker([destination[0], destination[1]]).addTo(map);
+
+  try {
+    const lat = destination[0];
+    const lon = destination[1];
+
+    // --- Fetch AQI ---
+    let res = await fetch(`https://api.openweathermap.org/data/2.5/air_pollution?lat=${lat}&lon=${lon}&appid=${OPENWEATHER_API_KEY}`);
+    if (!res.ok) throw new Error("AQI API request failed");
+    let data = await res.json();
+    const aqi = data.list[0].main.aqi;
+    document.getElementById("pop").textContent = aqiLabel(aqi);
+
+    // --- Fetch Weather ---
+    res = await fetch(`https://api.openweathermap.org/data/2.5/weather?lat=${lat}&lon=${lon}&units=metric&appid=${OPENWEATHER_API_KEY}`);
+    if (!res.ok) throw new Error("Weather API request failed");
+    data = await res.json();
+    const temperature = data.main.temp;
+    const weatherDesc = data.weather[0].description;
+    document.getElementById("temp").textContent = `${temperature}°C, ${weatherDesc}`;
+
+    // --- Fetch Routes from OpenRouteService ---
+    res = await fetch("https://api.openrouteservice.org/v2/directions/driving-car/geojson", {
+      method: "POST",
+      headers: { Authorization: ORS_API_KEY, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        coordinates: [[origin[1], origin[0]], [destination[1], destination[0]]],
+        alternative_routes: { target_count: 2 }
+      })
+    });
+    if (!res.ok) throw new Error("Route API request failed");
+    data = await res.json();
+    const routes = data.features;
+
+    const allDistances = routes.map(r => r.properties.summary.distance);
+    const shortestDist = Math.min(...allDistances);
+    const longestDist = Math.max(...allDistances);
+
+    currentDist_km = (shortestDist / 1000).toFixed(2);
+    const longest_km = (longestDist / 1000).toFixed(2);
+
+    const TRANSIT_SPEED = 22;
+    const WALKING_SPEED = 5;
+    const transportTime = Math.round((currentDist_km / TRANSIT_SPEED) * 60);
+    const walkingTime = Math.round((currentDist_km / WALKING_SPEED) * 60);
+    const longestTime = Math.round((longest_km / TRANSIT_SPEED) * 60);
+
+    // --- Update Comparison Card ---
+    document.getElementById("comparison-card").style.display = "block";
+    document.getElementById("comparison-card").classList.add("animate-in");
+    document.getElementById("min-dist").innerText = currentDist_km + " km";
+    document.getElementById("max-dist").innerText = longest_km + " km";
+    document.getElementById("min-time").innerText = transportTime + " min";
+    document.getElementById("max-time").innerText = longestTime + " min";
+    document.getElementById("dist-diff").innerText = (longest_km - currentDist_km).toFixed(2);
+
+    // --- Update Sidebar Info ---
+    document.getElementById("distance-info").innerText = currentDist_km;
+    document.getElementById("dist-sidebar").innerText = currentDist_km + " km";
+    document.getElementById("time-est").innerHTML =
+      `<div style="font-weight:bold; color:var(--primary)">🚗 ${transportTime} min</div>` +
+      `<div class="walk-text">🚶 ${walkingTime} min walk</div>`;
+
+    // --- Update fares ---
+    updateFares();
+
+    // --- Population Exposure ---
+    const popExp = currentDist_km > 7 ? "High Risk" : currentDist_km > 3 ? "Moderate" : "Low";
+    const popColor = currentDist_km > 7 ? "#dc2626" : currentDist_km > 3 ? "#f59e0b" : "#10b981";
+    const popEl = document.getElementById("pop-exposure");
+    popEl.innerText = popExp;
+    popEl.style.color = popColor;
+
+    // --- Draw Routes & Animate Marker ---
+    routeLayerGroup = L.layerGroup().addTo(map);
+    let animationCoords = [];
+    routes.forEach(route => {
+      const isShortest = route.properties.summary.distance === shortestDist;
+      L.geoJSON(route, {
+        style: {
+          color: isShortest ? "blue" : "red",
+          weight: isShortest ? 6 : 4,
+          opacity: isShortest ? 1 : 0.6,
+          dashArray: isShortest ? "" : "5,10"
+        }
+      }).addTo(routeLayerGroup);
+      if (isShortest) animationCoords = route.geometry.coordinates.map(c => [c[1], c[0]]);
+    });
+
+    map.fitBounds(L.geoJSON(routes[0]).getBounds(), { padding: [50, 50] });
+    if (animationCoords.length > 0) animateMarker(animationCoords);
+
+    // --- Smart Recommendation ---
+ function generateRecommendation(shortest_km, longest_km, transportTime, longestTime, routeCoordinates){
+    let reasons = [];
+    if(shortest_km < longest_km) reasons.push("Shortest distance reduces fuel and travel fatigue.");
+    if(transportTime < longestTime) reasons.push("Saves "+(longestTime-transportTime)+" minutes.");
+    if(shortest_km < 5) reasons.push("Lower population exposure risk.");
+    reasons.push("Most cost-efficient option.");
+
+    // --- New Safety Logic ---
+    let nearbyCrimes = crimes.filter(c => routeCoordinates.some(rc => getDistance(rc[0], rc[1], c.lat, c.lon) < 0.5)).length;
+    let nearbyAccidents = accidents.filter(a => routeCoordinates.some(rc => getDistance(rc[0], rc[1], a.lat, a.lon) < 0.5)).length;
+
+    if(nearbyCrimes === 0) reasons.push("✅ Route avoids high crime zones.");
+    else reasons.push(`⚠️ ${nearbyCrimes} crime hotspots nearby.`);
+
+    if(nearbyAccidents === 0) reasons.push("✅ Route avoids accident-prone areas.");
+    else reasons.push(`⚠️ ${nearbyAccidents} accident-prone spots nearby.`);
+
+    // --- Display ---
+    document.getElementById("recommendation-card").style.display="block";
+    document.getElementById("recommendation-card").classList.add("animate-in");
+    document.getElementById("best-route-title").innerText="Recommended: Shortest Route ("+shortest_km+" km)";
+    const list=document.getElementById("recommendation-reasons"); 
+    list.innerHTML="";
+    reasons.forEach(r=>{
+        let li=document.createElement("li"); 
+        li.textContent=r; 
+        list.appendChild(li);
+    });
+}
+
+// --- Helper function to calculate approximate distance in km between two lat/lon points ---
+function getDistance(lat1, lon1, lat2, lon2){
+    const R = 6371; // Radius of Earth in km
+    const dLat = (lat2-lat1) * Math.PI/180;
+    const dLon = (lon2-lon1) * Math.PI/180;
+    const a = Math.sin(dLat/2)**2 + Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLon/2)**2;
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+    return R * c;
+}
+generateRecommendation(currentDist_km, longest_km, transportTime, longestTime, routes[0].geometry.coordinates.map(c => [c[1], c[0]]));
+  } catch (err) {
+    console.error(err);
+    alert("Could not fetch AQI, Weather, or Route data.");
+  }
+});
+// ==========================
+// EMERGENCY SOS (Vehicle Based)
+// ==========================
+document.getElementById("sosBtn").addEventListener("click", function(){
+
+  if (!animatedMarker) {
+    alert("Please calculate route first so vehicle starts moving.");
+    return;
+  }
+
+  if (!confirm("🚨 Trigger Emergency SOS from current vehicle location?")) {
+    return;
+  }
+
+  const currentPos = animatedMarker.getLatLng();
+  const lat = currentPos.lat;
+  const lon = currentPos.lng;
+
+  const locationLink = `https://www.google.com/maps?q=${lat},${lon}`;
+
+  // Remove previous SOS marker
+  if (window.sosMarker) map.removeLayer(window.sosMarker);
+
+  const sosIcon = L.divIcon({
+    className: "vehicle-icon",
+    html: "🚨",
+    iconSize: [30,30]
+  });
+
+  window.sosMarker = L.marker([lat, lon], {icon: sosIcon})
+    .addTo(map)
+    .bindPopup("🚨 EMERGENCY LOCATION<br><b>Double click this icon to remove SOS</b>")
+    .openPopup();
+
+  map.setView([lat, lon], 16);
+
+  alert("🚨 SOS Triggered!\n\nLocation:\n" + locationLink);
+
+  // Mobile only
+ window.location.href = "tel:+919431768242";
+
+  // ==========================
+  // DOUBLE CLICK TO REMOVE SOS
+  // ==========================
+  window.sosMarker.on("dblclick", function(){
+    map.removeLayer(window.sosMarker);
+    window.sosMarker = null;
+    alert("✅ SOS Cleared Successfully");
+  });
+
+});
+    </script>
+  </body>
+</html>
